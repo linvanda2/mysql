@@ -28,6 +28,7 @@ $query->select(['uid', 'name'])
   ->from('wei_users u')
   ->join('wei_auth_users au', "u.uid=au.uid")
   ->where(['uid' => $uid])
+  ->where("name like :user_name", ["user_name" => "%{$user_name}%"])// 注意 like 的写法
   ->groupBy("u.phone")
   ->having("count(u.phone)>1")
   ->orderBy("u.uid desc")
