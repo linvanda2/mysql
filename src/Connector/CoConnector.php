@@ -183,7 +183,7 @@ class CoConnector implements IConnector
      */
     private function tryReconnectForQueryFail()
     {
-        if ($this->mysql->connected || !in_array($this->mysql->errno, [2006, 2013])) {
+        if ($this->mysql->connected || !in_array($this->mysql->errno, [2002, 2006, 2013])) {
             return false;
         }
 
