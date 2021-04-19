@@ -569,7 +569,7 @@ Trait Builder
      */
     private function plainText(string $text): string
     {
-        return preg_replace('/[^-a-zA-Z0-9_.,\s*()]+/', '', $text);
+        return preg_replace('/[^-a-zA-Z0-9_.,\s*()\'"]+/', '', $text);
     }
 
     private function isExpression($value)

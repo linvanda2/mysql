@@ -215,11 +215,6 @@ go(function () {
     // TimeTick::memory();
 
     $query = create_query();
-    for ($i = 0; $i < 8; $i++) {
-        go(function () use ($query) {
-            $r = $query->execute("select sleep(1)");
-        });
-    }
-    Co::sleep(16);
-
+    $r = $query->select ("'' as type")->from("wei_users")->one();
+    var_export($r);
 });
