@@ -117,7 +117,6 @@ class CoConnector implements IConnector
             }
         } else {
             $result = $this->mysql->query($sql, $timeout);
-
             if ($result === false && $this->tryReconnectForQueryFail()) {
                 $result = $this->mysql->query($sql, $timeout);
             }
@@ -183,11 +182,12 @@ class CoConnector implements IConnector
      */
     private function tryReconnectForQueryFail()
     {
-        if ($this->mysql->connected || !in_array($this->mysql->errno, [2002, 2006, 2013])) {
+        if (!in_array($this->mysql->errno, [2002, 2006, 2013])) {
             return false;
         }
 
-        // 尝试重新连接
+        // 尝试重新连接（注意：需要手动先将connected设置为 false，否则无法重新连接）
+        $this->mysql->connected = false;
         $connRst = $this->connect();
 
         if ($connRst) {
@@ -196,6 +196,7 @@ class CoConnector implements IConnector
             $this->mysql->errno = 0;
             $this->mysql->connect_error = '';
             $this->mysql->connect_errno = 0;
+            $this->mysql->connected = true;
         }
 
         return $connRst;

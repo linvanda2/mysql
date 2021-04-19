@@ -9,6 +9,7 @@ use Dev\MySQL\Exception\PoolClosedException;
 use Dev\MySQL\Connector\IConnectorBuilder;
 use Dev\MySQL\Connector\IConnector;
 use Dev\MySQL\Connector\ConnectorInfo;
+use Swoole\Timer;
 
 /**
  * 协程版连接池
@@ -25,11 +26,8 @@ class CoPool implements IPool
 
     protected static $container = [];
 
-    /** @var IConnectorBuilder */
     protected $readPool;
-    /** @var co\Channel */
     protected $writePool;
-    /** @var co\Channel */
     protected $connectorBuilder;
     // 连接池大小
     protected $size;
@@ -46,6 +44,8 @@ class CoPool implements IPool
     protected $status;
     // 连续等待连接对象失败次数（超过一定次数说明很可能数据库连接暂不可用）
     protected $waitTimeoutNum;
+    // 定时器
+    protected $timer;
 
     /**
      * CoPool constructor.
@@ -55,7 +55,7 @@ class CoPool implements IPool
      * @param int $maxExecCount
      * @throws \Exception
      */
-    protected function __construct(IConnectorBuilder $connectorBuilder, int $size = 25, int $maxSleepTime = 600, int $maxExecCount = 1000)
+    protected function __construct(IConnectorBuilder $connectorBuilder, int $size = 10, int $maxSleepTime = 8, int $maxExecCount = 1000)
     {
         $this->connectorBuilder = $connectorBuilder;
         $this->readPool = new co\Channel($size);
@@ -68,6 +68,14 @@ class CoPool implements IPool
         $this->writeConnectNum = 0;
         $this->waitTimeoutNum = 0;
         $this->status = self::STATUS_OK;
+
+        // 定时器
+        $this->timer = Timer::tick(12000, \Closure::fromCallable([$this, 'checkIdle']));
+    }
+
+    public function __destruct()
+    {
+        $this->close();
     }
 
     /**
@@ -77,7 +85,7 @@ class CoPool implements IPool
      * @param int $maxExecCount
      * @return CoPool
      */
-    public static function instance(IConnectorBuilder $connectorBuilder, int $size = 25, int $maxSleepTime = 600, int $maxExecCount = 1000): CoPool
+    public static function instance(IConnectorBuilder $connectorBuilder, int $size = 10, int $maxSleepTime = 8, int $maxExecCount = 1000): CoPool
     {
         if (!isset(static::$container[$connectorBuilder->getKey()])) {
             static::$container[$connectorBuilder->getKey()] = new static($connectorBuilder, $size, $maxSleepTime, $maxExecCount);
@@ -104,7 +112,7 @@ class CoPool implements IPool
 
         if ($pool->isEmpty()) {
             // 超额，不能再创建，需等待
-            if (($type == 'read' ? $this->readConnectNum : $this->writeConnectNum) > $this->size * 6) {
+            if (($type == 'read' ? $this->readConnectNum : $this->writeConnectNum) > $this->size * 3) {
                 // 放置数据库临时不可用，多次等待失败，则直接返回
                 if ($this->waitTimeoutNum > self::MAX_WAIT_TIMEOUT_NUM) {
                     // 超出了等待失败次数限制，直接抛异常
@@ -177,7 +185,7 @@ class CoPool implements IPool
         $connInfo = $this->connectInfo($connector);
         $pool = $this->getPool($connInfo->type);
 
-        if (!$this->isOk() || $pool->isFull() || !$this->isHealthy($connector)) {
+        if (!$this->isOk() || $pool->isFull() || !$this->isHealthy($connInfo)) {
             return $this->closeConnector($connector);
         }
 
@@ -195,6 +203,10 @@ class CoPool implements IPool
      */
     public function close(): bool
     {
+        if ($this->status == self::STATUS_CLOSED) {
+            return true;
+        }
+
         $this->status = self::STATUS_CLOSED;
 
         // 关闭通道中所有的连接。等待5ms为的是防止还有等待push的排队协程
@@ -204,10 +216,29 @@ class CoPool implements IPool
         while ($conn = $this->writePool->pop(0.005)) {
             $this->closeConnector($conn);
         }
+
+        // 关闭读写池
         $this->readPool->close();
         $this->writePool->close();
 
+        // 从连接池容器中卸载
+        unset(static::$container[$this->key()]);
+
+        // 清除 timer
+        if ($this->timer && Timer::exists($this->timer)) {
+            Timer::clear($this->timer);
+            $this->timer = null;
+        }
+
         return true;
+    }
+
+    /**
+     * 连接池的 key
+     */
+    public function key(): string
+    {
+        return $this->connectorBuilder->getKey();
     }
 
     public function count(): array
@@ -229,6 +260,34 @@ class CoPool implements IPool
         $this->untickConnectNum($this->connectsInfo[$objId]->type);
         unset($this->connectsInfo[$objId]);
         return true;
+    }
+
+    /**
+     * 检查超过空闲时限的连接，将其关闭
+     */
+    protected function checkIdle()
+    {
+        $this->internalCheckIdle($this->readPool);
+        $this->internalCheckIdle($this->writePool);
+    }
+
+    protected function internalCheckIdle(co\Channel $channel)
+    {
+        $size = $channel->length();
+        $now = time();
+        while (!$channel->isEmpty() && $size-- > 0) {
+            $conn = $channel->pop(0.01);
+            if (!$conn) {
+                continue;
+            }
+
+            $connInfo = $this->connectInfo($conn);
+            if ($connInfo->status == ConnectorInfo::STATUS_IDLE && $now - $connInfo->lastExecTime() >= $this->maxSleepTime) {
+                $this->closeConnector($conn);
+            } else {
+                $channel->push($conn);
+            }
+        }
     }
 
     protected function isOk()
@@ -302,12 +361,10 @@ class CoPool implements IPool
      * 1. SQL 执行次数超过阈值；
      * 2. 连接对象距最后使用时间超过阈值；
      * 3. 连接对象不是连接池创建的
-     * @param IConnector $connector
      * @return bool
      */
-    protected function isHealthy(IConnector $connector): bool
+    protected function isHealthy(ConnectorInfo $connectorInfo): bool
     {
-        $connectorInfo = $this->connectInfo($connector);
         if (!$connectorInfo) {
             return false;
         }

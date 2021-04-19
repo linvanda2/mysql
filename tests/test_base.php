@@ -2,8 +2,15 @@
 
 require '../vendor/autoload.php';
 
+use Dev\MySQL\Connector\CoConnectorBuilder;
+use Dev\MySQL\Connector\DBConfig;
+use Dev\MySQL\Pool\CoPool;
+use Dev\MySQL\Query;
 use Swoole\Coroutine as Co;
 use Dev\MySQL\Test\TimeTick;
+use Dev\MySQL\Transaction\CoTransaction;
+use Swoole\Coroutine\Channel;
+use Swoole\Timer;
 
 error_reporting(E_ERROR);
 
@@ -65,14 +72,16 @@ ET;
 
 function create_query()
 {
-    // 请根据实际情况配置数据库信息，账号需要有 create table、drop table 以及增删改查的权限
-    $config = new \Dev\MySQL\Connector\DBConfig('192.168.85.67', 'yanpinpin', 'yanpinpin@123', 'user_center');
-    $connBuilder = new \Dev\MySQL\Connector\CoConnectorBuilder($config);
-    $pool = \Dev\MySQL\Pool\CoPool::instance($connBuilder, 20);
-    $trans = new \Dev\MySQL\Transaction\CoTransaction($pool);
-    $query = new \Dev\MySQL\Query($trans);
+        $writeConfObj = new DBConfig('192.168.85.135', 'root', 'weicheche', 'weicheche');
+        $readConfObjs = [
+            new DBConfig('192.168.85.135', 'root', 'weicheche', 'weicheche')
+        ];
 
-    return $query;
+        $mySQLBuilder = CoConnectorBuilder::instance($writeConfObj, $readConfObjs);
+        $pool = CoPool::instance($mySQLBuilder, $dbConf['pool']['size'] ?? 10);
+        $transaction = new CoTransaction($pool);
+
+        return new Query($transaction);
 }
 
 /**
@@ -189,6 +198,11 @@ function request_select($send_num = 2000)
     }
 }
 
+class A
+{
+
+}
+
 
 // 测试脚本
 go(function () {
@@ -196,7 +210,16 @@ go(function () {
 //    create_table(create_query());
 
     // 并发请求查询
-    TimeTick::tick('start');
-    request_select( 40000);
-    TimeTick::memory();
+    // TimeTick::tick('start');
+    // request_select( 40000);
+    // TimeTick::memory();
+
+    $query = create_query();
+    for ($i = 0; $i < 8; $i++) {
+        go(function () use ($query) {
+            $r = $query->execute("select sleep(1)");
+        });
+    }
+    Co::sleep(16);
+
 });
