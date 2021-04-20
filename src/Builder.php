@@ -29,7 +29,10 @@ Trait Builder
     private $havingParams = [];
     private $valuesParams = [];
     private $setParams = [];
-    private $rawSqlInfo = [];
+    /**
+     * @var \Dev\MySQL\Transaction\TContext 记录协程上下文相关的信息
+     */
+    private $context;
 
     /**
      * 只能调用一次
@@ -365,7 +368,7 @@ Trait Builder
      */
     public function rawSql(): array
     {
-        return $this->rawSqlInfo;
+        return $this->context['raw_sql_info'] ?? ['', []];
     }
 
     /**
@@ -416,25 +419,25 @@ Trait Builder
     /**
      * 编译
      * 目前仅支持 select,update,insert,replace,delete
-     * @param bool $reset 编译后是否重置构造器
      * @return array [$preSql, $params]
      */
-    private function compile(bool $reset = true)
+    private function compile()
     {
+        $this->context['raw_sql_info'] = ['', []];
+
         if (!$this->type) {
-            return ['', []];
+            $this->reset();
+            return $this->context['raw_sql_info'];
         }
 
         $method = 'compile' . ucfirst($this->type);
         if (method_exists($this, $method)) {
-            $this->rawSqlInfo = $this->$method();
-            if ($reset) {
-                $this->reset();
-            }
-            return $this->rawSqlInfo;
+            $this->context['raw_sql_info'] = $this->$method();
         }
 
-        return ['', []];
+        $this->reset();
+
+        return $this->context['raw_sql_info'];
     }
 
     private function compileSelect()

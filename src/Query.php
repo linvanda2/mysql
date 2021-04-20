@@ -4,6 +4,7 @@ namespace Dev\MySQL;
 
 use Dev\MySQL\Exception\DBException;
 use Dev\MySQL\Transaction\ITransaction;
+use Dev\MySQL\Transaction\TContext;
 
 /**
  * 查询器，对外暴露的 API
@@ -26,6 +27,7 @@ class Query
     public function __construct(ITransaction $transaction)
     {
         $this->transaction = $transaction;
+        $this->context = new TContext();
     }
 
     /**
@@ -127,26 +129,30 @@ class Query
 
     /**
      * 便捷方法：分页查询
+     * 注意：page 中执行了两次 command，这之间会发生协程切换，而查询器是多携程共享的，所以必须正确处理数据隔离
      * @return array|false
      * @throws DBException
      */
     public function page(): array
     {
-        $fields = $this->fields;
-        $limit = $this->limit ?: 20;
-        $offset = $this->offset ?? 0;
+        $this->limit = $this->limit ?: 20;
+        $this->offset = $this->offset ?: 0;
 
-        $countRes = $this->transaction->command(...$this->fields('count(*) as cnt')->reset('limit')->compile(false));
+        // compile 之前先暂存属性值，供后面使用
+        $this->stash();
+        $countRes = $this->transaction->command(...$this->fields('count(*) as cnt')->reset('limit')->compile());
         if ($countRes === false) {
+            $this->stashClear();
             throw new DBException($this->lastError(), $this->lastErrorNo());
         }
 
         if (!$countRes || !$countRes[0]['cnt']) {
-            $this->reset();
+            $this->stashClear();
             return ['total' => 0, 'data' => []];
         }
 
-        $data = $this->transaction->command(...$this->fields($fields)->limit($limit, $offset)->compile());
+        $this->stashApply();
+        $data = $this->transaction->command(...$this->compile());
 
         if ($data === false) {
             throw new DBException($this->lastError(), $this->lastErrorNo());
@@ -207,5 +213,43 @@ class Query
     public function affectedRows()
     {
         return $this->transaction->affectedRows();
+    }
+
+    /**
+     * 将查询器的属性值暂存到当前协程上下文中，防止在协程切换中被破坏（或污染其他协程）
+     */
+    private function stash()
+    {
+        $data = [];
+        foreach ($this as $propKey => $propVal) {
+            $data[$propKey] = $propVal;
+        }
+
+        $this->context['stash'] = $data;
+    }
+
+    /**
+     * 将当前协程暂存区的数据应用到查询器上
+     */
+    private function stashApply()
+    {
+        if (!isset($this->context['stash'])) {
+            return;
+        }
+
+        $data = $this->context['stash'];
+        unset($this->context['stash']);
+
+        foreach ($this as $propKey => $_) {
+            $this->{$propKey} = $data[$propKey] ?? null;
+        }
+    }
+
+    /**
+     * 清除暂存区数据
+     */
+    private function stashClear()
+    {
+        unset($this->context['stash']);
     }
 }

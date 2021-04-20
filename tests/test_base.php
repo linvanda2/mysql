@@ -214,7 +214,36 @@ go(function () {
     // request_select( 40000);
     // TimeTick::memory();
 
-    $query = create_query();
-    $r = $query->select ("'' as type")->from("wei_users")->one();
-    var_export($r);
+    for ($i = 1; $i <= 5; $i++) {
+        go(function () use ($i) {
+            $query = create_query();
+            $r = $query->select("uid,phone,".($i)." as num")->from("wei_users")->limit($i * 5, 0)->page();
+            echo "\n============$i========\n";
+            var_export($query->rawSql());
+        });
+    }
 });
+
+// class AB
+// {
+//     public $a;
+//     protected $b;
+//     private $c;
+
+//     public function __construct()
+//     {
+//         $this->a = 'ad';
+//     }
+
+//     public function f()
+//     {
+
+//     }
+
+//     public function say()
+//     {
+//         foreach ($this as $k => $val) {
+//             echo "key:$k, val:$val\n";
+//         }
+//     }
+// }
