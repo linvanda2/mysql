@@ -222,6 +222,9 @@ class Query
     {
         $data = [];
         foreach ($this as $propKey => $propVal) {
+            if (in_array($propKey, ['transaction', 'context'])) {
+                continue;
+            }
             $data[$propKey] = $propVal;
         }
 
@@ -241,6 +244,9 @@ class Query
         unset($this->context['stash']);
 
         foreach ($this as $propKey => $_) {
+            if (in_array($propKey, ['transaction', 'context'])) {
+                continue;
+            }
             $this->{$propKey} = $data[$propKey] ?? null;
         }
     }
