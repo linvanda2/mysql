@@ -6,6 +6,7 @@ use Dev\MySQL\Exception\ConnectException;
 use Dev\MySQL\Exception\TransactionException;
 use Dev\MySQL\Pool\IPool;
 use Dev\MySQL\Connector\IConnector;
+use Psr\Log\LoggerInterface;
 
 /**
  * 协程版事务管理器
@@ -17,10 +18,12 @@ class CoTransaction implements ITransaction
 {
     private $pool;
     private $context;
+    private $logger;
 
-    public function __construct(IPool $pool)
+    public function __construct(IPool $pool, LoggerInterface $logger = null)
     {
         $this->pool = $pool;
+        $this->logger = $logger;
         $this->context = new TContext();
     }
 
@@ -65,6 +68,10 @@ class CoTransaction implements ITransaction
         $this->resetLastExecInfo();
         $this->clearSQL();
 
+        if ($this->logger) {
+            $this->logger->info("transaction begin");
+        }
+
         return $isImplicit || $connector->begin();
     }
 
@@ -94,6 +101,10 @@ class CoTransaction implements ITransaction
         // 隐式事务需要及时提交
         if ($isImplicit && !$this->commit($isImplicit)) {
             return false;
+        }
+
+        if ($this->logger) {
+            $this->logger->info("[SQL]:{$preSql},params:" . print_r($params, true));
         }
 
         return $result;
@@ -143,6 +154,9 @@ class CoTransaction implements ITransaction
 
         if ($conn = $this->connector(false)) {
             $conn->rollback();
+            if ($this->logger) {
+                $this->logger->info("transaction rollback");
+            }
         }
 
         $this->releaseTransResource();
