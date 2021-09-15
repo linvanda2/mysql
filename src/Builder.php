@@ -490,7 +490,10 @@ Trait Builder
     private function compileDelete()
     {
         return [
-            $this->trimSpace("delete from $this->table $this->where $this->orderBy $this->limit"),
+            $this->trimSpace(
+                "delete from $this->table $this->where $this->orderBy "
+                . ($this->limit && $this->limit > 0 ? "limit {$this->limit}" : "")
+            ),
             $this->whereParams
         ];
     }

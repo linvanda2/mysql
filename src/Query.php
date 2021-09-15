@@ -180,7 +180,7 @@ class Query
         }
 
         if ($result === false) {
-            throw new DBException($this->lastError(), $this->lastErrorNo());
+            throw new DBException($this->lastError() . '.raw sql:' . $this->rawSql()[0], $this->lastErrorNo());
         }
 
         return $result;
