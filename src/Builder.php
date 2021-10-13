@@ -386,7 +386,7 @@ Trait Builder
             return [$sql, []];
         }
 
-        preg_match_all('/:([^\s;]+)/', $sql, $matches);
+        preg_match_all('/:([^\s;)]+)/', $sql, $matches);
 
         if (!($matches = $matches[1])) {
             return [$sql, []];
