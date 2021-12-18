@@ -19,6 +19,7 @@ class CoConnector implements IConnector
     private $lastExpendTime = 0;
     private $peakExpendTime = 0;
     private $lastExecTime = 0;
+    private $isInTrans = false;
 
     public function __construct(
         string $host,
@@ -78,6 +79,7 @@ class CoConnector implements IConnector
         $this->execCount = 0;
         $this->lastExecTime = 0;
         $this->lastExpendTime = 0;
+        $this->isInTrans = false;
     }
 
     /**
@@ -131,17 +133,32 @@ class CoConnector implements IConnector
 
     public function begin(): bool
     {
-        return $this->mysql->begin();
+        if ($this->mysql->begin()) {
+            $this->isInTrans = true;
+            return true;
+        }
+
+        return false;
     }
 
     public function commit(): bool
     {
-        return $this->mysql->commit();
+        if ($this->mysql->commit()) {
+            $this->isInTrans = false;
+            return true;
+        }
+
+        return false;
     }
 
     public function rollback(): bool
     {
-        return $this->mysql->rollback();
+        if ($this->mysql->rollback()) {
+            $this->isInTrans = false;
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -182,7 +199,8 @@ class CoConnector implements IConnector
      */
     private function tryReconnectForQueryFail()
     {
-        if (!in_array($this->mysql->errno, [2002, 2006, 2013])) {
+        // 处于事务中则不能重连（事务是连接级别的）
+        if ($this->isInTrans || !in_array($this->mysql->errno, [2002, 2006, 2013])) {
             return false;
         }
 
