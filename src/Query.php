@@ -199,7 +199,7 @@ class Query
      */
     public function lastError()
     {
-        return $this->transaction->lastError();
+        return $this->transaction->lastError() ?: '';
     }
 
     /**
@@ -207,7 +207,7 @@ class Query
      */
     public function lastErrorNo()
     {
-        return $this->transaction->lastErrorNo();
+        return intval($this->transaction->lastErrorNo() ?: 500);
     }
 
     public function affectedRows()
