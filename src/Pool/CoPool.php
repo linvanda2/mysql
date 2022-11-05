@@ -209,17 +209,20 @@ class CoPool implements IPool
 
         $this->status = self::STATUS_CLOSED;
 
-        // 关闭通道中所有的连接。等待5ms为的是防止还有等待push的排队协程
-        while ($conn = $this->readPool->pop(0.005)) {
-            $this->closeConnector($conn);
-        }
-        while ($conn = $this->writePool->pop(0.005)) {
-            $this->closeConnector($conn);
-        }
+        // 注意：此时可能已经不在协程环境，所以要加判断
+        if (co::getCid() > -1) {
+            // 关闭通道中所有的连接。等待5ms为的是防止还有等待push的排队协程
+            while ($conn = $this->readPool->pop(0.005)) {
+                $this->closeConnector($conn);
+            }
+            while ($conn = $this->writePool->pop(0.005)) {
+                $this->closeConnector($conn);
+            }
 
-        // 关闭读写池
-        $this->readPool->close();
-        $this->writePool->close();
+            // 关闭读写池
+            $this->readPool->close();
+            $this->writePool->close();
+        }
 
         // 从连接池容器中卸载
         unset(static::$container[$this->key()]);
