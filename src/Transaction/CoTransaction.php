@@ -92,7 +92,7 @@ class CoTransaction implements ITransaction
         $isImplicit = !$this->isRunning();
 
         // 如果是隐式事务，则需要自动开启事务
-        if ($isImplicit && !$this->begin($this->calcModelFromSQL($preSql), true)) {
+        if ($isImplicit && !$this->begin($this->calcModelFromSQL($preSql, false), true)) {
             return false;
         }
 
@@ -172,7 +172,7 @@ class CoTransaction implements ITransaction
     {
         // 事务处于开启状态时不允许切换运行模式
         if (!isset($model) || $this->isRunning()) {
-            return $this->context['model'];
+            return $this->context['model'] ?? '';
         }
 
         $this->context['model'] = $model === 'read' ? 'read' : 'write';
@@ -268,8 +268,13 @@ class CoTransaction implements ITransaction
         unset($this->context['sql']);
     }
 
-    private function calcModelFromSQL(string $sql): string
+    private function calcModelFromSQL(string $sql, bool $overwrite = true): string
     {
+        if (!$overwrite && $this->model()) {
+            // 非强制覆盖模式下，如果已经设置了模式，则不能修改
+            return $this->model();
+        }
+
         if (preg_match('/^(update|replace|delete|insert|drop|grant|truncate|alter|create)\s/i', trim($sql))) {
             return 'write';
         }
