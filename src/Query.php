@@ -140,6 +140,8 @@ class Query
 
         // compile 之前先暂存属性值，供后面使用
         $this->stash();
+        // 暂存 model
+        $model = $this->transaction->model();
         $countRes = $this->transaction->command(...$this->fields('count(*) as cnt')->reset('limit')->compile());
         if ($countRes === false) {
             $this->stashClear();
@@ -152,6 +154,8 @@ class Query
         }
 
         $this->stashApply();
+        // 将 model 和前面设置一致
+        $this->transaction->model($model);
         $data = $this->transaction->command(...$this->compile());
 
         if ($data === false) {
