@@ -1,6 +1,8 @@
 协程版 MySQL 查询器
 ----
 
+实现细节参见个人博客：[Swoole 实战：MySQL 查询器的实现（协程连接池版）](https://www.cnblogs.com/linvanda/p/12819077.html)
+
 #### 使用
 - 入口：`Dev\MySQL\Query`
 - 请在实际项目中使用工厂或者 IoC 容器创建/注入 Query 对象，如：
