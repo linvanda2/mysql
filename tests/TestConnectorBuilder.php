@@ -14,10 +14,10 @@ class TestConnectorBuilder implements \Dev\MySQL\Connector\IConnectorBuilder
     public function build(string $connType = 'write'): \Dev\MySQL\Connector\IConnector
     {
         return new \Dev\MySQL\Connector\CoConnector(
-            '192.168.85.135',
+            '192.168.1.11',
             'root',
-            'weicheche',
-            'weicheche'
+            '123',
+            '123'
         );
     }
 }
