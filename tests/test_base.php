@@ -72,9 +72,9 @@ ET;
 
 function create_query()
 {
-        $writeConfObj = new DBConfig('192.168.85.135', 'root', 'weicheche', 'weicheche');
+        $writeConfObj = new DBConfig('192.168.1.11', 'root', '123', '123');
         $readConfObjs = [
-            new DBConfig('192.168.85.135', 'root', 'weicheche', 'weicheche')
+            new DBConfig('192.168.1.11', 'root', '123', '123')
         ];
 
         $mySQLBuilder = CoConnectorBuilder::instance($writeConfObj, $readConfObjs);
